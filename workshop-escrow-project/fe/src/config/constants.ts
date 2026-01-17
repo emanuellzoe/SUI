@@ -7,7 +7,7 @@ export const NETWORK_CONFIG = {
 
 export const CONTRACT_CONFIG = {
   PACKAGE_ID:
-    "0x564337b73f43ba8720963237864235a79c435276cf7f1efe63ca1e9c355bece7",
+    "0x47f0a281abb82cd2684113b06d037d7b873f318e91fefc1e5dc4d006f57b2c56 ",
 
   MODULE_NAME: "progressive_escrow",
 
@@ -24,7 +24,7 @@ export const CONTRACT_CONFIG = {
 } as const;
 
 export const ARBITER_ADDRESS =
-  "0xf041a6d2d141a2b6f39591aac151390fe23953e04940d64bf20a583ce9ed2186";
+  "0x90cb8d57bd13f74ea9337dca1e270e51c6ce64f7fb78d571b73f2386ac91e534";
 
 export const JOB_CATEGORIES = [
   "Web Development",

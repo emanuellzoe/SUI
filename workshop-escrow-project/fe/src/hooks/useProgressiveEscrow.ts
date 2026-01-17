@@ -5,6 +5,8 @@ import { Transaction } from "@mysten/sui/transactions";
 import { CONTRACT_CONFIG, ARBITER_ADDRESS } from "../config/constants";
 import { useState, useRef, useCallback, useEffect } from "react";
 
+import { CONTRACT_CONFIG } from "../config/constants";
+
 export interface JobData {
   title: string;
   description: string;

@@ -1,358 +1,402 @@
+// fitur fitur :
+// 1. post job (client)
+// 2. accept job / start work (freelancer)
+// 2a decline job untuk freelancer (blom aku buat, tapi bisa jadi salah satu inovasi pengembangan setelah workshop)
+// 2b decline job / cancel job - > untuk si clientnya gajadi nge create job
+// 4. submit milestone / submit work (freelancer)
+// 5. tolak hasil milestone (client)
+// 6. terima hasil milestone (client)
+// 7. ajuin banding (freelancer)
+// 8. nentuin hasil banding (juri)
+
+// 9. deploy smart contract
+// 10. ngeintegrasiin fe ke function yang ada disini
+// 11. ngedeploy project fe (biar bisa diakses sama semua orang)
 
 module progressive_escrow::progressive_escrow {
-    // import modul" SUI yang dibutuhkan
-    
-    use sui::object::{Self, ID, UID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
-    use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
+    use sui::coin::{Self, Coin};
     use sui::sui::SUI;
+    use sui::transfer;
     use sui::event;
+
+    // CONSTANT VARIABLE (Hardcoded Arbiter)
+    const ARBITER: address = @0x90cb8d57bd13f74ea9337dca1e270e51c6ce64f7fb78d571b73f2386ac91e534;
     
-    // Hardcoded walelt addressnya juri
-    const ARBITER: address = @0xf041a6d2d141a2b6f39591aac151390fe23953e04940d64bf20a583ce9ed2186;
-    
-    // Status Constants
-    const ASSIGNED: u8 = 0;           // Job telah dibuat, freelancer sudah di assign
-    const WORKING: u8 = 1;            // Freelancer sedang mengerjakan milestone terkini
-    const IN_REVIEW: u8 = 2;          // Kerjaan di milestone tertentu sudah disubmit freelancer dan menunggu reviewnya client 
-    const REJECTED: u8 = 3;           // Client menolak hasil kerjaan freelancer di milestone tertentu, freelancer bisa langsung revisi atau ajukan banding
-    const DISPUTED: u8 = 4;           // Banding (dispute) diajukan, menunggu keputusannya juri
-    const COMPLETED: u8 = 5;          // Semua milestone telah terpenuhi
-    const CANCELLED: u8 = 6;          // Job di cancel
-    
-    // Error Code
+    // Status Constants Variable
+    const ASSIGNED : u8 = 0; 
+    const WORKING : u8 = 1;
+    const IN_REVIEW : u8 = 2;
+    const REJECTED : u8 = 3;
+    const APPROVED : u8 = 4;
+    const DISPUTED : u8 = 5;
+    const CANCELLED : u8 = 6;
+
+    // Error Codes
     const E_NOT_CLIENT: u64 = 1;
     const E_NOT_FREELANCER: u64 = 2;
     const E_NOT_ARBITER: u64 = 3;
     const E_INVALID_STATUS: u64 = 4;
     const E_NO_MILESTONES_LEFT: u64 = 6;
-    const E_INVALID_MILESTONES: u64 = 8;
-    const E_JOB_COMPLETED: u64 = 10;
-    const E_INVALID_FREELANCER: u64 = 13;
+    const E_INVALID_MILESTONES : u64 = 8;
+    const E_JOB_COMPLETED : u64 = 10;
+    const E_INVALID_FREELANCER : u64 = 13;
     const E_SAME_ADDRESS: u64 = 14;
-    const E_DISPUTE_ALREADY_RESOLVED: u64 = 15; // Arbiter already decided for this milestone
+    const E_DISPUTE_ALREADY_RESOLVED: u64 = 15;
+    const COMPLETED : u8 = 7;
 
-    // Structs
+
+
+    // inisialisasi struct untuk event emit
     public struct JobCreated has copy, drop {
-        job_id: ID,
-        client: address,
-        freelancer: address,
-        total_payment: u64,
-        total_milestones: u64,
+        job_id : ID,
+        client : address,
+        freelancer : address,
+        total_payment : u64,
+        total_milestones: u64
     }
-    
+
     public struct WorkStarted has copy, drop {
-        job_id: ID,
-        freelancer: address,
-        milestone: u64,
+        job_id : ID,
+        freelancer : address,
+        milestone : u64
     }
     
     public struct WorkSubmitted has copy, drop {
-        job_id: ID,
-        freelancer: address,
-        milestone: u64,
-        description: vector<u8>,
+        job_id : ID,
+        freelancer : address,
+        milestone : u64,
+        description : vector<u8>
     }
-    
-    public struct MilestoneApproved has copy, drop {
-        job_id: ID,
-        client: address,
-        freelancer: address,
-        milestone: u64,
-        payment_amount: u64,
-    }
-    
+
     public struct MilestoneRejected has copy, drop {
-        job_id: ID,
-        client: address,
-        freelancer: address,
-        milestone: u64,
-        reason: vector<u8>,
+        job_id : ID,
+        client : address,
+        freelancer : address,
+        milestone : u64,
+        reason : vector<u8>
     }
-    
+
+    public struct MilestoneApproved has copy, drop {
+        job_id : ID,
+        client : address,
+        freelancer : address,
+        milestone : u64,
+        payment_amount : u64
+    }
+
     public struct DisputeRaised has copy, drop {
-        job_id: ID,
-        raised_by: address,
-        disputed_milestone: u64,
+        job_id : ID,
+        raised_by : address,
+        disputed_milestone : u64
     }
-    
     public struct ArbiterDecision has copy, drop {
-        job_id: ID,
-        arbiter: address,
-        client_wins: bool,
-        disputed_milestone: u64,
+        job_id : ID,
+        arbiter : address,
+        client_wins : bool,
+        disputed_milestone : u64,
     }
-    
+
     public struct JobCancelled has copy, drop {
-        job_id: ID,
-        cancelled_by: address,
-        reason: vector<u8>,
+        job_id : ID,
+        cancelled_by : address,
+        reason : vector<u8>
     }
 
+    // inisialisasi struct data yang bakal digunain untuk data jobescrow
     public struct JobEscrow has key {
-        id: UID,
-        client: address,
-        freelancer: address,              // Assigned at creation time
-        arbiter: address,                 // Hardcoded arbiter for disputes
-        deposit: Balance<SUI>,            // Money vault
-        total_milestones: u64,            // Total number of milestones
-        completed_milestones: u64,        // Number of completed milestones
-        current_milestone: u64,           // Current milestone being worked on (1-based)
-        milestone_amount: u64,            // Amount per milestone
-        remaining_amount: u64,            // Remaining amount for final milestone
-        status: u8,                       // Current job status
-        description: vector<u8>,          // Job description
-        milestone_reports: vector<vector<u8>>, // Descriptions submitted by freelancer for each milestone
-        disputed_milestone: u64,          // Which milestone is being disputed (0 = none)
-        rejection_reason: vector<u8>,     // Reason for last rejection
-        dispute_resolved: bool,           // True if arbiter decided for client on current milestone (cannot dispute again)
+        id : UID,
+        client : address,
+        freelancer : address,
+        arbiter : address, //hakim
+        deposit : Balance<SUI>,
+        total_milestones : u64,
+        completed_milestones: u64, //udah berapa banyak milestone yang selesai
+        current_milestone : u64, //di milestone ke berapa saat ini si freelancer sedang bekerja
+        milestone_amount : u64, // uang yg didapatkan oleh si client untuk setiap milestone
+        remaining_amount : u64, // uang yang masih ada di escrow
+        status : u8, //
+        description : vector<u8>, // deskripsi job yang dimasukkan oleh client
+        milestone_reports : vector<vector<u8>>, // laporan yang di inputkan oleh freelancer setiap submit milestone
+        disputed_milestone : u64, //milestone yang diajukan banding oleh si freelancer
+        rejection_reason : vector<u8>, // alasan kenapa si client menolak hasil kerjaannya si freelancer
+        dispute_resolved : bool // status apakah banding sudah selesai atau belum
     }
 
-    // Client membuat job baru dan langsung assign wallet addressnya freelancer
+
+    
+
+    // mulai buat function post_job (untuk si client)
     public fun post_job(
-        freelancer: address,
-        total_milestones: u64,
-        description: vector<u8>,
-        payment: Coin<SUI>,
-        ctx: &mut TxContext
-    ) {
+        freelancer : address, 
+        total_milestones:u64, 
+        description : vector<u8>, 
+        payment: Coin <SUI>,
+        ctx : &mut TxContext)
+    {
         let client = tx_context::sender(ctx);
-        
         assert!(total_milestones > 0, E_INVALID_MILESTONES);
+        assert!(freelancer != client, E_SAME_ADDRESS);
         assert!(freelancer != @0x0, E_INVALID_FREELANCER);
-        assert!(freelancer != client, E_SAME_ADDRESS); 
-        
+
         let payment_amount = coin::value(&payment);
         let deposit = coin::into_balance(payment);
-        
         let milestone_amount = payment_amount / total_milestones;
         let remaining_amount = payment_amount - (milestone_amount * (total_milestones - 1));
-        
-        let job = JobEscrow {
-            id: object::new(ctx),
+
+        let job = JobEscrow{
+            id : object::new(ctx),
             client,
             freelancer,
-            arbiter: ARBITER,  
+            arbiter : ARBITER,
             deposit,
             total_milestones,
-            completed_milestones: 0,
-            current_milestone: 1,
+            completed_milestones : 0,
+            current_milestone : 1, 
             milestone_amount,
             remaining_amount,
-            status: ASSIGNED,  
+            status : ASSIGNED,
             description,
-            milestone_reports: vector::empty(),
-            disputed_milestone: 0,
-            rejection_reason: vector::empty(),
-            dispute_resolved: false,
+            milestone_reports :  vector::empty(), //bentuknya sebuah array / vektor
+            disputed_milestone : 0,
+            rejection_reason : vector::empty(), //rejeciton bentuknya sebuah array karena bisa jadi freelancer mereject berkali"
+            dispute_resolved : false
         };
-        
+        let job_id = object::id(&job);
+        // bisa dilihat oleh berbagai wallet address (tidak hanya terbatas ke wallet address sendernya)
+        transfer::share_object(job);
+
         event::emit(JobCreated {
-            job_id: object::id(&job),
+            job_id,
             client,
             freelancer,
-            total_payment: payment_amount,
-            total_milestones,
+            total_payment : payment_amount,
+            total_milestones
         });
-        
-        transfer::share_object(job);
     }
 
-    // Freelancer nge start kerjaannya (ASSIGNED-> WORKING)
-    public fun start_work(job: &mut JobEscrow, ctx: &mut TxContext) {
+    // Mengubah status ASSIGNED -> WORKING di blockchain SUI
+    public fun start_work(job : &mut JobEscrow, ctx: &mut TxContext){
         let sender = tx_context::sender(ctx);
+        
         assert!(sender == job.freelancer, E_NOT_FREELANCER);
         assert!(job.status == ASSIGNED, E_INVALID_STATUS);
-        
+
+        // sender : freelancer
         job.status = WORKING;
-        
+
         event::emit(WorkStarted {
-            job_id: object::id(job),
-            freelancer: sender,
-            milestone: job.current_milestone,
+            job_id : object::id(job),
+            freelancer : sender,
+            milestone : job.current_milestone
         });
+
     }
-    
-    // Freelancer nge submit kerjaannya (sesuai dengan milestone terkininya) (WORKING -> IN_REVIEW)
-    public fun submit_work(
-        job: &mut JobEscrow, 
-        milestone_description: vector<u8>,
-        ctx: &mut TxContext
-    ) {
-        assert!(tx_context::sender(ctx) == job.freelancer, E_NOT_FREELANCER);
+
+    // mengubah status WORKING -> IN_REVIEW
+    public fun submit_work(job : &mut JobEscrow, milestone_description : vector<u8>, ctx: &mut TxContext)
+    {
+        let sender = tx_context::sender(ctx);
+        assert!(sender == job.freelancer, E_NOT_FREELANCER);
+        
         assert!(job.status == WORKING || job.status == REJECTED, E_INVALID_STATUS);
+
         assert!(job.completed_milestones < job.total_milestones, E_NO_MILESTONES_LEFT);
-        assert!(job.status != COMPLETED, E_JOB_COMPLETED);
-        
+
         job.status = IN_REVIEW;
-        
+        // menambahkan milestone_description ke array / vektor yang ada di job.milestone_reports
         vector::push_back(&mut job.milestone_reports, milestone_description);
-        
         job.rejection_reason = vector::empty();
-        
+
         event::emit(WorkSubmitted {
-            job_id: object::id(job),
-            freelancer: job.freelancer,
-            milestone: job.current_milestone,
-            description: milestone_description,
+            job_id : object::id(job),
+            freelancer : job.freelancer,
+            milestone : job.current_milestone,
+            description : milestone_description
         });
     }
 
-    // Client nge-approve pekerjaan yang di submit oleh freelancer di milestone tertentu (IN_REVIEW -> WORKING / COMPLETED)
-    public fun approve_milestone(job: &mut JobEscrow, ctx: &mut TxContext) {
-        assert!(tx_context::sender(ctx) == job.client, E_NOT_CLIENT);
+    // mengubah status IN_REVIEW -> REJECTED
+    public fun reject_milestone(job : &mut JobEscrow, reason: vector<u8>, ctx : &mut TxContext)
+    {   
+        let sender = tx_context::sender(ctx);
+        assert!(sender == job.client, E_NOT_CLIENT);
         assert!(job.status == IN_REVIEW, E_INVALID_STATUS);
-        
+
+        job.status = REJECTED;
+        job.rejection_reason = reason;
+
+        event::emit(MilestoneRejected {
+            job_id : object::id(job),
+            client : job.client,
+            freelancer : job.freelancer,
+            milestone : job.current_milestone,
+            reason
+        });
+    }
+
+    // mengubah status IN_REVIEW -> APPROVED
+    public fun approve_milestone(job : &mut JobEscrow, _reason: vector<u8>, ctx : &mut TxContext)
+    {   
+        let sender = tx_context::sender(ctx);
+        assert!(sender == job.client, E_NOT_CLIENT);
+        assert!(job.status == IN_REVIEW, E_INVALID_STATUS);
+
+        job.status = APPROVED;
         job.completed_milestones = job.completed_milestones + 1;
-        
-        let payment_amount = if (job.completed_milestones == job.total_milestones) {
+
+        // satu logic -> akan kepake ketika remaining amountnya itu ada sisa dari pembagian
+        // 1 sui dengan 3 milestones -> 0.33 * 3 = 0.99 (0,01 yang hilang) 
+        // 0.34 sui -> amount yang harus cair di milestone terakhir
+        let payment_amount = if (job.completed_milestones == job.total_milestones)
+        {
+            // ini untuk yang amount cair di milestone terakhir (0.34)
             balance::value(&job.deposit)
-        } else {
+        }
+        else{
+            // ini untuk yang 0.33
             job.milestone_amount
         };
-        
+
         let payment_balance = balance::split(&mut job.deposit, payment_amount);
         let payment_coin = coin::from_balance(payment_balance, ctx);
         transfer::public_transfer(payment_coin, job.freelancer);
-        
-        event::emit(MilestoneApproved {
-            job_id: object::id(job),
-            client: job.client,
-            freelancer: job.freelancer,
-            milestone: job.completed_milestones,
-            payment_amount,
-        });
-        
-        if (job.completed_milestones == job.total_milestones) {
+
+        // ngeupdate status completed milestones
+        if(job.completed_milestones == job.total_milestones){
+            // freelancer udah selesai nyelesain semua milestones
             job.status = COMPLETED;
-        } else {
+        }
+        else{
+            // freelancer blom menyelesaikan semua milestones
             job.current_milestone = job.current_milestone + 1;
             job.status = WORKING;
         };
-    }
-    
-    // Client men-decline pekerjaan yang di submit oleh freelancer di milestone tertentu (IN_REVIEW -> REJECTED)
-    public fun reject_milestone(job: &mut JobEscrow, reason: vector<u8>, ctx: &mut TxContext) {
-        assert!(tx_context::sender(ctx) == job.client, E_NOT_CLIENT);
-        assert!(job.status == IN_REVIEW, E_INVALID_STATUS);
-        
-        job.rejection_reason = reason;
-        job.status = REJECTED;
-        
-        event::emit(MilestoneRejected {
-            job_id: object::id(job),
-            client: job.client,
-            freelancer: job.freelancer,
-            milestone: job.current_milestone,
-            reason,
+
+        event::emit(MilestoneApproved {
+            job_id : object::id(job),
+            client : job.client,
+            freelancer : job.freelancer,
+            milestone : job.current_milestone,
+            payment_amount
         });
     }
 
-    // Freelancer mengajukan banding(dispute) (REJECTED -> DISPUTED)
-    public fun raise_dispute(job: &mut JobEscrow, ctx: &mut TxContext) {
+    // sebagai freelancer, apabila milestonenya di reject, maka freelancer bisa raise dispute (ajuin banding)
+    public fun raise_dispute(job : &mut JobEscrow, ctx : &mut TxContext){
+        // sender : freelancer
         let sender = tx_context::sender(ctx);
         assert!(sender == job.freelancer, E_NOT_FREELANCER);
-        assert!(job.status == REJECTED, E_INVALID_STATUS); // Can only dispute when rejected
-        assert!(!job.dispute_resolved, E_DISPUTE_ALREADY_RESOLVED); // Cannot dispute again after arbiter decided
-        
+        assert!(job.status == REJECTED, E_INVALID_STATUS);
+
+        // status yang berubah dari REJECTED -> DISPUTED
         job.status = DISPUTED;
         job.disputed_milestone = job.current_milestone;
-        
+
         event::emit(DisputeRaised {
-            job_id: object::id(job),
-            raised_by: sender,
-            disputed_milestone: job.current_milestone,
+            job_id : object::id(job),
+            raised_by : sender,
+            disputed_milestone : job.current_milestone
         });
     }
-    
-    // Juri menentukan siapa yang menang dalam banding tersebut 
-    // 1. Apabila yang menang adalah client, maka statusnya (DISPUTED -> REJECTED) 
-    // 2. Apabila yang menang adalah freelancer, maka statusnya (DISPTUED -> WORKING / COMPLETED) 
-    public fun arbiter_decide(
-        job: &mut JobEscrow, 
-        client_wins: bool, 
-        ctx: &mut TxContext
-    ) {
+
+    // nentuin hasil banding sebagai hakim (arbiter)
+    public fun arbiter_decide(job : &mut JobEscrow, client_wins : bool, ctx: &mut TxContext ) {
         let sender = tx_context::sender(ctx);
-        assert!(job.status == DISPUTED, E_INVALID_STATUS);
+
         assert!(sender == job.arbiter, E_NOT_ARBITER);
+        assert!(job.status == DISPUTED, E_INVALID_STATUS);
         
-        event::emit(ArbiterDecision {
-            job_id: object::id(job),
-            arbiter: sender,
-            client_wins,
-            disputed_milestone: job.disputed_milestone,
-        });
-        
-        if (client_wins) {
+        // boolean client_wins : true -> si client
+        // boolean client_wins : false -> freelancer
+
+        // sender : arbiter (hakim)
+        let sender = tx_context::sender(ctx);
+
+        if(client_wins){
+            // freelancer harus ngerjain revisi 
+            // 1. statusnya berubah dari DISPUTED -> REJECTED
             job.status = REJECTED;
+            // 2. job.disputed_milestone = 0;
             job.disputed_milestone = 0;
-            job.dispute_resolved = true; 
-        } else {
+            // 3. job.dispute_resolved = true; -> disputenya udah selesai
+            job.dispute_resolved = true;
+        }
+        else{
+            // statusnya berubah dari DISPUTED -> WORKING / COMPLETED
+            // ngeupdate status completed milestones
+
+            // ngeupdate status completed_milestones dan current_milestone 
             job.completed_milestones = job.completed_milestones + 1;
-            
-            let payment_amount = if (job.completed_milestones == job.total_milestones) {
-                balance::value(&job.deposit)
-            } else {
-                job.milestone_amount
-            };
-            
-            let payment_balance = balance::split(&mut job.deposit, payment_amount);
-            let payment_coin = coin::from_balance(payment_balance, ctx);
-            transfer::public_transfer(payment_coin, job.freelancer);
-            
-            event::emit(MilestoneApproved {
-                job_id: object::id(job),
-                client: job.client,
-                freelancer: job.freelancer,
-                milestone: job.completed_milestones,
-                payment_amount,
-            });
-            
-            if (job.completed_milestones == job.total_milestones) {
+
+            if(job.completed_milestones == job.total_milestones){
+                // freelancer udah selesai nyelesain semua milestones
                 job.status = COMPLETED;
-            } else {
+            }
+            else{
+                // freelancer blom menyelesaikan semua milestones
                 job.current_milestone = job.current_milestone + 1;
                 job.status = WORKING;
             };
-            
-            job.disputed_milestone = 0;
+            // uang yang ada di milestone tersebut langsung cair ke walletnya si freelancer
+            let payment_amount = if (job.completed_milestones == job.total_milestones)
+            {
+                // ini untuk yang amount cair di milestone terakhir (0.34)
+                balance::value(&job.deposit)
+            }
+            else{
+                // ini untuk yang 0.33
+                job.milestone_amount
+            };
+            let payment_balance = balance::split(&mut job.deposit, payment_amount);
+            let payment_coin = coin::from_balance(payment_balance, ctx);
+            transfer::public_transfer(payment_coin, job.freelancer);
         };
+        
+        event::emit(ArbiterDecision {
+            job_id : object::id(job),
+            arbiter : sender,
+            client_wins,
+            disputed_milestone : job.disputed_milestone
+        });
     }
 
-    // Client nge cancel job yang telah di create (dapat dilakukkan apabila statusnya ASSIGNED/WORKING dan belum ada milestone yang terpenuhi)
-    public fun cancel_job(job: &mut JobEscrow, reason: vector<u8>, ctx: &mut TxContext) {
-        assert!(tx_context::sender(ctx) == job.client, E_NOT_CLIENT);
-        
+    public fun cancel_job(job : &mut JobEscrow, reason : vector<u8>, ctx : &mut TxContext)
+    {
+        let sender = tx_context::sender(ctx);
+        // job.completed_milestones == 0 && job.status == ASSIGNED;
+        assert!(sender == job.client, E_NOT_CLIENT);
         assert!(job.completed_milestones == 0, E_INVALID_STATUS);
-        assert!(job.status == ASSIGNED || job.status == WORKING, E_INVALID_STATUS);
-        
+        assert!(job.status == ASSIGNED, E_INVALID_STATUS);
+
         let remaining_balance = balance::withdraw_all(&mut job.deposit);
         let refund_coin = coin::from_balance(remaining_balance, ctx);
         transfer::public_transfer(refund_coin, job.client);
         
+        // ngubah status dari ASSIGNED -> CANCELLED
         job.status = CANCELLED;
-        
-        event::emit(JobCancelled {
-            job_id: object::id(job),
-            cancelled_by: job.client,
-            reason,
+
+        event::emit(JobCancelled 
+        {
+            job_id : object::id(job),
+            cancelled_by : job.client,
+            reason
         });
     }
 
-    // Fungsi View (untuk memudahkan integrasi fungsi-fungsi di SC ke FE)
+    // View functions : membuat function getter untuk frontend bisa ngambil log dari setiap transaksi yang terjadi 
+
     public fun get_job_info(job: &JobEscrow): (
-        address,    // wallet address client
-        address,    // wallet address freelancer
-        u64,        // total_milestones
-        u64,        // completed_milestones
-        u64,        // current_milestone
-        u64,        // balance_amount
-        u8,         // status
-        vector<u8>  // description
-    ) {
+        address, // wallet address client
+        address, // wallet address freelancer
+        u64, //total milestones
+        u64, //completed milestones
+        u64, //current milestone
+        u64, //balance amount
+        u8, // status
+        vector<u8> // description
+    ) 
+    {
         (
             job.client,
             job.freelancer,
@@ -364,61 +408,65 @@ module progressive_escrow::progressive_escrow {
             job.description
         )
     }
-    
-    public fun get_dispute_info(job: &JobEscrow): (
-        u64,      // disputed_milestone
-        address   // juri
-    ) {
+
+    public fun get_milestone_reports(job: &JobEscrow) : &vector<vector<u8>> {
+        &job.milestone_reports
+    }
+
+    public fun get_dispute_info(job: &JobEscrow): 
+    (
+        u64, //disputed_milestone : milestone ke-berapa yang diajukan banding
+        address //addressnya si arbiter (hakim)
+    )
+    {
         (
             job.disputed_milestone,
             job.arbiter
         )
     }
     
-    public fun get_milestone_reports(job: &JobEscrow): vector<vector<u8>> {
-        job.milestone_reports
-    }
-    
-    public fun get_rejection_reason(job: &JobEscrow): vector<u8> {
+    public fun get_rejection_reason(job: &JobEscrow) : vector<u8> {
         job.rejection_reason
     }
-    
-    public fun is_job_completed(job: &JobEscrow): bool {
-        job.completed_milestones >= job.total_milestones
+
+    // untuk ngereturn status apakah semua milestone sudah selesai dikerjakan oleh freelancer atau belum
+    public fun is_job_completed(job:&JobEscrow) : bool {
+        job.completed_milestones == job.total_milestones
     }
     
-    public fun get_progress_percentage(job: &JobEscrow): u64 {
-        if (job.total_milestones == 0) {
-            0
-        } else {
-            (job.completed_milestones * 100) / job.total_milestones
-        }
+    // digunain di fe untuk mbuat visualiasi progress bar
+    public fun get_progress_percentage(job:&JobEscrow) : u64 {
+        job.completed_milestones * 100
     }
     
-    public fun get_milestone_payment_estimate(job: &JobEscrow): u64 {
+    // untuk tau berapa bayaran setiap milestone
+    public fun get_milestone_payment_estimate(job:&JobEscrow) : u64 {
         job.milestone_amount
     }
     
-    public fun get_remaining_payment(job: &JobEscrow): u64 {
+    // untuk tau masih ada berapa uang di escrow
+    public fun get_remaining_payment(job:&JobEscrow) : u64 {
         balance::value(&job.deposit)
     }
-    
-    public fun can_raise_dispute(job: &JobEscrow): bool {
+
+    // untuk si freelancernya (status di smart contract sedang rejected)
+    public fun can_raise_dispute(job: &JobEscrow) : bool {
+        // akan ngereturn true ketika job.status == REJECTED
         job.status == REJECTED
     }
-    
-    public fun can_cancel_job(job: &JobEscrow): bool {
-        job.completed_milestones == 0 && (
-            job.status == ASSIGNED || 
-            job.status == WORKING
-        )
+
+    public fun can_cancel_job(job: &JobEscrow) : bool 
+    {
+        // job bisa di cancel ketika completed milestonenya masih 0 dan job.statusnya itu masih assigned 
+        job.completed_milestones == 0 && job.status == ASSIGNED
     }
-    
-    public fun get_arbiter(job: &JobEscrow): address {
+
+    public fun get_arbiter(job: &JobEscrow) : address {
         job.arbiter
     }
     
-    public fun is_arbiter(job: &JobEscrow, addr: address): bool {
+    public fun is_arbiter(job: &JobEscrow, addr : address) : bool {
         addr == job.arbiter
     }
+    
 }
