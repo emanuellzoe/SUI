@@ -4,6 +4,7 @@ import { SuiClientProvider, WalletProvider } from "@mysten/dapp-kit";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { ReactNode } from "react";
+import { RoleProvider } from "../hooks/useRole";
 
 export const networks = {
   mainnet: { url: getFullnodeUrl("mainnet") },
@@ -47,7 +48,9 @@ const SuiProvider: React.FC<SuiProviderProps> = ({
             name: "Freelance Marketplace",
           }}
         >
-          {children}
+          <RoleProvider>
+            {children}
+          </RoleProvider>
         </WalletProvider>
       </SuiClientProvider>
     </QueryClientProvider>
@@ -55,3 +58,4 @@ const SuiProvider: React.FC<SuiProviderProps> = ({
 };
 
 export default SuiProvider;
+
