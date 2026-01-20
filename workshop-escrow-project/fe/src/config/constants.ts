@@ -7,7 +7,7 @@ export const NETWORK_CONFIG = {
 
 export const CONTRACT_CONFIG = {
   PACKAGE_ID:
-    "0x47f0a281abb82cd2684113b06d037d7b873f318e91fefc1e5dc4d006f57b2c56 ",
+    "0x47f0a281abb82cd2684113b06d037d7b873f318e91fefc1e5dc4d006f57b2c56",
 
   MODULE_NAME: "progressive_escrow",
 
