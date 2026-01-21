@@ -10,7 +10,6 @@ import MilestoneSubmitForm from "./MilestoneSubmitForm";
 import {
   JOB_STATUS,
   JOB_STATUS_LABELS,
-  ARBITER_ADDRESS,
 } from "../config/constants";
 
 interface Job {
@@ -21,7 +20,8 @@ interface Job {
   budget: number;
   deadline: string;
   client: string;
-  freelancer: string;
+  freelancer: string | null;
+  arbiter: string | null;
   status: number;
   skills: string[];
   postedAt: string;
@@ -31,6 +31,8 @@ interface Job {
   milestoneAmount: number;
   rejectionReason?: string;
   milestoneReports?: string[];
+  workDeadline?: number;
+  reviewDeadline?: number;
 }
 
 const MarketplaceJobs = () => {
@@ -43,6 +45,8 @@ const MarketplaceJobs = () => {
     rejectMilestone,
     raiseDispute,
     arbiterDecide,
+    getUserActivity,
+    formatDeadline,
     isLoading,
   } = useProgressiveEscrow();
 
@@ -65,12 +69,12 @@ const MarketplaceJobs = () => {
     type: "success" | "error";
     message: string;
   } | null>(null);
-
-  const isArbiter = currentAccount?.address === ARBITER_ADDRESS;
+  const [isArbiter, setIsArbiter] = useState(false);
 
   const disputedJobsCount = jobs.filter(
     (job) => job.status === JOB_STATUS.DISPUTED
   ).length;
+
 
   const transformJobs = useCallback((blockchainJobs: any[]): Job[] => {
     return blockchainJobs.map((job: any) => {
@@ -146,7 +150,8 @@ const MarketplaceJobs = () => {
         budget,
         deadline: job.deadline || "Not specified",
         client: job.client || "Unknown",
-        freelancer: job.freelancer,
+        freelancer: job.freelancer || null,
+        arbiter: job.arbiter || null,
         status: Number(job.status),
         skills: extractSkills(job.description || ""),
         postedAt: job.createdAt
@@ -158,6 +163,8 @@ const MarketplaceJobs = () => {
         milestoneAmount: Number(job.milestoneAmount) || 0,
         rejectionReason: job.rejectionReason,
         milestoneReports: job.milestoneReports || [],
+        workDeadline: job.workDeadline,
+        reviewDeadline: job.reviewDeadline,
       };
     });
   }, []);
@@ -201,14 +208,25 @@ const MarketplaceJobs = () => {
   }, []);
 
   useEffect(() => {
-    if (currentAccount?.address) {
-            loadJobs(true);
-
-      if (currentAccount.address === ARBITER_ADDRESS) {
-        setActiveFilter("disputes");
+    const checkArbiterStatus = async () => {
+      if (currentAccount?.address) {
+        try {
+          const activity = await getUserActivity(currentAccount.address, false);
+          setIsArbiter(activity.isArbiter || false);
+          if (activity.isArbiter) {
+            setActiveFilter("disputes");
+          }
+        } catch (e) {
+          console.error("Failed to check arbiter status", e);
+        }
       }
+    };
+    
+    if (currentAccount?.address) {
+      loadJobs(true);
+      checkArbiterStatus();
     }
-  }, [currentAccount?.address]);
+  }, [currentAccount?.address, getUserActivity]);
 
   const filterJobs = (jobs: Job[]) => {
     let filtered = jobs;
@@ -258,13 +276,14 @@ const MarketplaceJobs = () => {
       JOB_STATUS_LABELS[status as keyof typeof JOB_STATUS_LABELS] || "Unknown";
 
     const statusColors: { [key: number]: string } = {
-      [JOB_STATUS.ASSIGNED]: "bg-accent-cyan/20 text-accent-cyan",
-      [JOB_STATUS.WORKING]: "bg-accent-blue/20 text-accent-blue",
-      [JOB_STATUS.IN_REVIEW]: "bg-accent-orange/20 text-accent-orange",
-      [JOB_STATUS.REJECTED]: "bg-accent-red/20 text-accent-red",
-      [JOB_STATUS.DISPUTED]: "bg-accent-purple/20 text-accent-purple",
-      [JOB_STATUS.COMPLETED]: "bg-accent-green/20 text-accent-green",
-      [JOB_STATUS.CANCELLED]: "bg-dark-600/20 text-dark-400",
+      [JOB_STATUS.OPEN]: "bg-green-100 text-green-700",
+      [JOB_STATUS.ASSIGNED]: "bg-cyan-100 text-cyan-700",
+      [JOB_STATUS.WORKING]: "bg-blue-100 text-blue-700",
+      [JOB_STATUS.IN_REVIEW]: "bg-orange-100 text-orange-700",
+      [JOB_STATUS.REJECTED]: "bg-red-100 text-red-700",
+      [JOB_STATUS.DISPUTED]: "bg-purple-100 text-purple-700",
+      [JOB_STATUS.COMPLETED]: "bg-emerald-100 text-emerald-700",
+      [JOB_STATUS.CANCELLED]: "bg-gray-100 text-gray-500",
     };
 
     const colorClass = statusColors[status] || "bg-dark-600/20 text-dark-400";
@@ -276,8 +295,8 @@ const MarketplaceJobs = () => {
     );
   };
 
-  const formatAddress = (address: string) => {
-    if (!address) return "Unknown";
+  const formatAddress = (address: string | null) => {
+    if (!address) return "Not assigned";
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
