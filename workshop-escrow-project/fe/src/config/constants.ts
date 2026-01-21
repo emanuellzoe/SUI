@@ -7,24 +7,77 @@ export const NETWORK_CONFIG = {
 
 export const CONTRACT_CONFIG = {
   PACKAGE_ID:
-    "0x47f0a281abb82cd2684113b06d037d7b873f318e91fefc1e5dc4d006f57b2c56",
+    "0x54eb8e00613bb1c63f9581df45f9a9d8d9cf0bbf9089058ca378c5fffe62d742",
 
-  MODULE_NAME: "progressive_escrow",
+  MODULE_NAME: "progressive_escrow_v2",
+
+  // Shared object IDs (created at deployment)
+  ARBITER_REGISTRY_ID:
+    "0xc8743783d6e8082765f9876e608470749d4c2d30e7622787c8e71eb3c4f900e4",
 
   FUNCTIONS: {
+    // Job Functions
     POST_JOB: "post_job",
+    CANCEL_JOB: "cancel_job",
+    
+    // Application Functions
+    APPLY_FOR_JOB: "apply_for_job",
+    ACCEPT_APPLICATION: "accept_application",
+    REJECT_APPLICATION: "reject_application",
+    
+    // Work Functions
     START_WORK: "start_work",
     SUBMIT_WORK: "submit_work",
+    
+    // Review Functions
     APPROVE_MILESTONE: "approve_milestone",
     REJECT_MILESTONE: "reject_milestone",
+    AUTO_APPROVE_IF_DEADLINE_PASSED: "auto_approve_if_deadline_passed",
+    
+    // Dispute Functions
     RAISE_DISPUTE: "raise_dispute",
     ARBITER_DECIDE: "arbiter_decide",
-    CANCEL_JOB: "cancel_job",
+    
+    // Arbiter Functions
+    REGISTER_ARBITER: "register_arbiter",
   },
 } as const;
 
-export const ARBITER_ADDRESS =
-  "0x90cb8d57bd13f74ea9337dca1e270e51c6ce64f7fb78d571b73f2386ac91e534";
+// New Job Status for v2 (includes OPEN status)
+export const JOB_STATUS = {
+  OPEN: 0,       // Job is open for applications
+  ASSIGNED: 1,   // Freelancer assigned, waiting to start
+  WORKING: 2,    // Freelancer is working
+  IN_REVIEW: 3,  // Milestone submitted for review
+  REJECTED: 4,   // Client rejected work
+  DISPUTED: 5,   // Waiting for arbiter decision
+  COMPLETED: 6,  // All milestones done
+  CANCELLED: 7,  // Job cancelled
+} as const;
+
+export const JOB_STATUS_LABELS = {
+  [JOB_STATUS.OPEN]: "Open - Accepting Applications",
+  [JOB_STATUS.ASSIGNED]: "Assigned - Waiting to Start",
+  [JOB_STATUS.WORKING]: "In Progress",
+  [JOB_STATUS.IN_REVIEW]: "Milestone Submitted",
+  [JOB_STATUS.REJECTED]: "Revision Needed",
+  [JOB_STATUS.DISPUTED]: "Dispute - Awaiting Arbiter",
+  [JOB_STATUS.COMPLETED]: "Completed",
+  [JOB_STATUS.CANCELLED]: "Cancelled",
+} as const;
+
+// Application Status
+export const APPLICATION_STATUS = {
+  PENDING: 0,
+  ACCEPTED: 1,
+  REJECTED: 2,
+} as const;
+
+export const APPLICATION_STATUS_LABELS = {
+  [APPLICATION_STATUS.PENDING]: "Pending Review",
+  [APPLICATION_STATUS.ACCEPTED]: "Accepted",
+  [APPLICATION_STATUS.REJECTED]: "Rejected",
+} as const;
 
 export const JOB_CATEGORIES = [
   "Web Development",
@@ -39,26 +92,6 @@ export const JOB_CATEGORIES = [
   "Smart Contract Development",
   "Other",
 ] as const;
-
-export const JOB_STATUS = {
-  ASSIGNED: 0, // Job created with freelancer assigned
-  WORKING: 1, // Freelancer is working
-  IN_REVIEW: 2, // Milestone submitted for review
-  REJECTED: 3, // Client rejected work
-  DISPUTED: 4, // Waiting for arbiter decision
-  COMPLETED: 5, // All milestones done
-  CANCELLED: 6, // Job cancelled
-} as const;
-
-export const JOB_STATUS_LABELS = {
-  [JOB_STATUS.ASSIGNED]: "Assigned - Waiting to Start",
-  [JOB_STATUS.WORKING]: "In Progress",
-  [JOB_STATUS.IN_REVIEW]: "Milestone Submitted",
-  [JOB_STATUS.REJECTED]: "Revision Needed",
-  [JOB_STATUS.DISPUTED]: "Dispute - Awaiting Arbiter",
-  [JOB_STATUS.COMPLETED]: "Completed",
-  [JOB_STATUS.CANCELLED]: "Cancelled",
-} as const;
 
 export const UI_CONFIG = {
   ANIMATION: {
@@ -99,6 +132,14 @@ export const CURRENCY_CONFIG = {
   MIN_DISPLAY_AMOUNT: 0.0001,
 } as const;
 
+// Deadline defaults (in milliseconds)
+export const DEADLINE_CONFIG = {
+  DEFAULT_WORK_DEADLINE_MS: 7 * 24 * 60 * 60 * 1000,   // 7 days
+  DEFAULT_REVIEW_DEADLINE_MS: 3 * 24 * 60 * 60 * 1000, // 3 days
+  MIN_WORK_DEADLINE_MS: 1 * 24 * 60 * 60 * 1000,       // 1 day
+  MAX_WORK_DEADLINE_MS: 90 * 24 * 60 * 60 * 1000,      // 90 days
+} as const;
+
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api",
   TIMEOUT: 30000, // 30 seconds
@@ -127,24 +168,34 @@ export const ERROR_MESSAGES = {
   UNAUTHORIZED: "You are not authorized to perform this action",
   JOB_NOT_FOUND: "Job not found",
   INVALID_FREELANCER_ADDRESS: "Invalid freelancer wallet address",
+  JOB_NOT_OPEN: "This job is not open for applications",
+  ALREADY_APPLIED: "You have already applied for this job",
+  DEADLINE_PASSED: "The deadline has passed",
 } as const;
 
 export const SUCCESS_MESSAGES = {
-  JOB_POSTED: "Job posted successfully!",
+  JOB_POSTED: "Job posted successfully! Waiting for freelancer applications.",
   WORK_STARTED: "Work started! Good luck with the project!",
   MILESTONE_SUBMITTED: "Milestone submitted for review!",
   MILESTONE_APPROVED: "Milestone approved! Payment released.",
   MILESTONE_REJECTED: "Milestone rejected. Freelancer will revise.",
-  DISPUTE_RAISED: "Dispute raised. Awaiting arbiter decision.",
+  DISPUTE_RAISED: "Dispute raised. A random arbiter has been assigned.",
   ARBITER_DECIDED: "Arbiter has made a decision.",
   JOB_CANCELLED: "Job cancelled. Funds returned.",
+  APPLICATION_SUBMITTED: "Application submitted successfully!",
+  APPLICATION_ACCEPTED: "Application accepted! Freelancer assigned.",
+  APPLICATION_REJECTED: "Application rejected.",
+  ARBITER_REGISTERED: "You are now registered as an arbiter!",
 } as const;
 
 export const DEFAULT_VALUES = {
   JOB_DURATION: 30, // 30 days default
   MILESTONES_COUNT: 3, // Default milestones
   ESCROW_PERCENTAGE: 100, // 100% of job value held in escrow
+  DEADLINE_PER_MILESTONE_DAYS: 7, // 7 days per milestone
+  REVIEW_PERIOD_DAYS: 3, // 3 days for client review
 } as const;
 
 export type JobCategory = (typeof JOB_CATEGORIES)[number];
 export type JobStatusType = keyof typeof JOB_STATUS_LABELS;
+export type ApplicationStatusType = keyof typeof APPLICATION_STATUS_LABELS;

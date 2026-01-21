@@ -6,10 +6,13 @@ import JobExplorer from "../components/JobExplorer";
 import JobDashboard from "../components/JobDashboard";
 import CreateJob from "../components/CreateJob";
 import MarketplaceJobs from "../components/MarketplaceJobs";
+import OpenJobsMarketplace from "../components/OpenJobsMarketplace";
+import JobApplications from "../components/JobApplications";
+import ArbiterDashboard from "../components/ArbiterDashboard";
 import RoleSelector from "../components/RoleSelector";
 import { useRole, UserRole } from "../hooks/useRole";
 
-type TabType = "marketplace" | "explorer" | "dashboard" | "create";
+type TabType = "marketplace" | "explorer" | "dashboard" | "create" | "open_jobs" | "applications" | "arbiter";
 
 // Define which tabs are available for each role
 const getRoleTabs = (role: UserRole) => {
@@ -17,19 +20,22 @@ const getRoleTabs = (role: UserRole) => {
     case 'client':
       return [
         { id: "create", label: "📝 Post Job", component: CreateJob },
-        { id: "explorer", label: "📋 My Jobs", component: JobExplorer },
+        { id: "applications", label: "📋 Review Applications", component: JobApplications },
+        { id: "explorer", label: "💼 My Jobs", component: JobExplorer },
         { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     case 'freelancer':
       return [
-        { id: "marketplace", label: "🔍 Find Jobs", component: MarketplaceJobs },
+        { id: "open_jobs", label: "🔍 Find Jobs", component: OpenJobsMarketplace },
         { id: "explorer", label: "💼 My Work", component: JobExplorer },
+        { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     case 'arbiter':
       return [
-        { id: "marketplace", label: "⚖️ Disputes", component: MarketplaceJobs },
+        { id: "arbiter", label: "⚖️ Arbiter Panel", component: ArbiterDashboard },
+        { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     default:
@@ -46,9 +52,18 @@ const getRoleLabel = (role: UserRole) => {
   }
 };
 
+const getDefaultTab = (role: UserRole): TabType => {
+  switch (role) {
+    case 'client': return 'create';
+    case 'freelancer': return 'open_jobs';
+    case 'arbiter': return 'arbiter';
+    default: return 'marketplace';
+  }
+};
+
 export default function Home() {
   const { role, hasSelectedRole, clearRole } = useRole();
-  const [activeTab, setActiveTab] = useState<TabType>("marketplace");
+  const [activeTab, setActiveTab] = useState<TabType | null>(null);
 
   // Show role selector if no role selected
   if (!hasSelectedRole || !role) {
@@ -59,8 +74,9 @@ export default function Home() {
   const roleInfo = getRoleLabel(role);
   
   // Get the first tab as default if current tab not available for this role
+  const defaultTab = getDefaultTab(role);
   const availableTabs = tabs.map(t => t.id);
-  const currentTab = availableTabs.includes(activeTab) ? activeTab : (availableTabs[0] as TabType);
+  const currentTab = activeTab && availableTabs.includes(activeTab) ? activeTab : defaultTab;
   
   const ActiveComponent =
     tabs.find((tab) => tab.id === currentTab)?.component || MarketplaceJobs;
@@ -74,10 +90,10 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Freelance Marketplace
+                  SUI Escrow v2
                 </h1>
                 <p className="text-sm text-gray-600 mt-1">
-                  Decentralized platform on Sui Blockchain
+                  Decentralized freelance marketplace with open jobs
                 </p>
               </div>
               {/* Role Badge */}
@@ -103,7 +119,7 @@ export default function Home() {
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Tab Navigation */}
-        <div className="bg-white border border-gray-200 rounded-lg p-2 mb-6 inline-flex gap-2">
+        <div className="bg-white border border-gray-200 rounded-lg p-2 mb-6 inline-flex gap-2 flex-wrap">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -124,6 +140,26 @@ export default function Home() {
           <ActiveComponent />
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-700">SUI Escrow v2</span>
+              <span>•</span>
+              <span>Powered by SUI Blockchain</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span>Multi-Arbiter System</span>
+              <span>•</span>
+              <span>Deadline Protection</span>
+              <span>•</span>
+              <span>Open Jobs Marketplace</span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
