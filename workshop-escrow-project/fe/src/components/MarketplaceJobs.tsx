@@ -276,11 +276,11 @@ const MarketplaceJobs = () => {
       JOB_STATUS_LABELS[status as keyof typeof JOB_STATUS_LABELS] || "Unknown";
 
     const statusColors: { [key: number]: string } = {
-      [JOB_STATUS.OPEN]: "bg-green-100 text-green-700",
       [JOB_STATUS.ASSIGNED]: "bg-cyan-100 text-cyan-700",
       [JOB_STATUS.WORKING]: "bg-blue-100 text-blue-700",
       [JOB_STATUS.IN_REVIEW]: "bg-orange-100 text-orange-700",
       [JOB_STATUS.REJECTED]: "bg-red-100 text-red-700",
+      [JOB_STATUS.APPROVED]: "bg-green-100 text-green-700",
       [JOB_STATUS.DISPUTED]: "bg-purple-100 text-purple-700",
       [JOB_STATUS.COMPLETED]: "bg-emerald-100 text-emerald-700",
       [JOB_STATUS.CANCELLED]: "bg-gray-100 text-gray-500",
@@ -307,11 +307,13 @@ const MarketplaceJobs = () => {
     setRejectReason("");
   };
 
-  const handleStartWork = async () => {
-    if (!selectedJob) return;
+  const handleStartWork = async (jobId?: string) => {
+    const targetJobId = jobId || selectedJob?.id;
+    if (!targetJobId) return;
     try {
-      await startWork(selectedJob.id);
-      setNotification({ type: "success", message: "Work started! Good luck!" });
+      await startWork(targetJobId);
+      setNotification({ type: "success", message: "🚀 Work started! Good luck!" });
+      loadJobs(true); // Refresh to update status
     } catch (err) {
       setNotification({
         type: "error",
@@ -322,18 +324,39 @@ const MarketplaceJobs = () => {
 
   const handleSubmitMilestone = async (description: string) => {
     if (!selectedJob) return;
+    
+    // Validate status before attempting to submit
+    if (selectedJob.status !== JOB_STATUS.WORKING && selectedJob.status !== JOB_STATUS.REJECTED) {
+      const statusLabel = JOB_STATUS_LABELS[selectedJob.status as keyof typeof JOB_STATUS_LABELS] || "Unknown";
+      setNotification({
+        type: "error",
+        message: `❌ Cannot submit milestone. Job status is "${statusLabel}". ${
+          selectedJob.status === JOB_STATUS.ASSIGNED 
+            ? "Please click 'Start Work' first!" 
+            : "Job must be in 'Working' or 'Rejected' status."
+        }`,
+      });
+      return;
+    }
+    
     try {
       await submitWork(selectedJob.id, description);
       setNotification({
         type: "success",
-        message: "Milestone submitted for review!",
+        message: "✅ Milestone submitted for review!",
       });
       setShowSubmitForm(false);
+      loadJobs(true); // Refresh to update status
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to submit milestone";
+      // Parse blockchain error for user-friendly message
+      let friendlyError = errorMsg;
+      if (errorMsg.includes("E_INVALID_STATUS") || errorMsg.includes("MoveAbort") && errorMsg.includes(", 4)")) {
+        friendlyError = "❌ Job status is not ready for submission. Please click 'Start Work' first!";
+      }
       setNotification({
         type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to submit milestone",
+        message: friendlyError,
       });
       throw err;
     }
@@ -695,6 +718,118 @@ const MarketplaceJobs = () => {
                   )}
                 </div>
               </div>
+
+              {/* FREELANCER ACTION BANNER - Shows required action prominently */}
+              {job.freelancer === currentAccount?.address && (
+                <>
+                  {/* Status: ASSIGNED - Need to Start Work */}
+                  {job.status === JOB_STATUS.ASSIGNED && (
+                    <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-green-800">🎉 Job Assigned to You!</p>
+                          <p className="text-sm text-green-700">Click "Start Work" to begin milestone 1</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartWork(job.id);
+                          }}
+                          disabled={isLoading}
+                          className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors shadow-md"
+                        >
+                          {isLoading ? "Starting..." : "▶ Start Work"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status: WORKING - Ready to Submit */}
+                  {job.status === JOB_STATUS.WORKING && (
+                    <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-300 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-blue-800">📝 Working on Milestone {job.currentMilestone}</p>
+                          <p className="text-sm text-blue-700">Ready to submit? Click the button →</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedJob(job);
+                            setShowSubmitForm(true);
+                          }}
+                          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-md"
+                        >
+                          📤 Submit Milestone
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status: REJECTED - Need Revision or Dispute */}
+                  {job.status === JOB_STATUS.REJECTED && (
+                    <div className="mt-4 p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-300 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-orange-800">⚠️ Milestone Rejected</p>
+                          <p className="text-sm text-orange-700">Revise and resubmit, or raise a dispute</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJob(job);
+                              setShowSubmitForm(true);
+                            }}
+                            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
+                          >
+                            🔄 Revise
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleJobClick(job);
+                            }}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+                          >
+                            ⚖️ Dispute
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status: IN_REVIEW - Waiting for client */}
+                  {job.status === JOB_STATUS.IN_REVIEW && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        ⏳ <span className="font-medium">Waiting for client review...</span> Milestone {job.currentMilestone} submitted
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* CLIENT ACTION BANNER */}
+              {job.client === currentAccount?.address && job.status === JOB_STATUS.IN_REVIEW && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-300 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-purple-800">📋 Review Milestone {job.currentMilestone}</p>
+                      <p className="text-sm text-purple-700">Freelancer submitted work for your review</p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJobClick(job);
+                      }}
+                      className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors shadow-md"
+                    >
+                      👁️ Review Now
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -947,7 +1082,7 @@ const MarketplaceJobs = () => {
                   <>
                     {selectedJob.status === JOB_STATUS.ASSIGNED && (
                       <button
-                        onClick={handleStartWork}
+                        onClick={() => handleStartWork()}
                         className="btn btn-primary"
                         disabled={isLoading}
                       >

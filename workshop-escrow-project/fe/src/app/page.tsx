@@ -6,36 +6,31 @@ import JobExplorer from "../components/JobExplorer";
 import JobDashboard from "../components/JobDashboard";
 import CreateJob from "../components/CreateJob";
 import MarketplaceJobs from "../components/MarketplaceJobs";
-import OpenJobsMarketplace from "../components/OpenJobsMarketplace";
-import JobApplications from "../components/JobApplications";
-import ArbiterDashboard from "../components/ArbiterDashboard";
 import RoleSelector from "../components/RoleSelector";
 import { useRole, UserRole } from "../hooks/useRole";
+import { CONTRACT_CONFIG } from "../config/constants";
 
-type TabType = "marketplace" | "explorer" | "dashboard" | "create" | "open_jobs" | "applications" | "arbiter";
+type TabType = "marketplace" | "explorer" | "dashboard" | "create";
 
-// Define which tabs are available for each role
+// V1 - Simplified tabs (no open jobs/applications system)
 const getRoleTabs = (role: UserRole) => {
   switch (role) {
     case 'client':
       return [
-        { id: "create", label: "📝 Post Job", component: CreateJob },
-        { id: "applications", label: "📋 Review Applications", component: JobApplications },
+        { id: "create", label: "📝 Create Job", component: CreateJob },
         { id: "explorer", label: "💼 My Jobs", component: JobExplorer },
         { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     case 'freelancer':
       return [
-        { id: "open_jobs", label: "🔍 Find Jobs", component: OpenJobsMarketplace },
         { id: "explorer", label: "💼 My Work", component: JobExplorer },
         { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     case 'arbiter':
       return [
-        { id: "arbiter", label: "⚖️ Arbiter Panel", component: ArbiterDashboard },
-        { id: "marketplace", label: "🏪 All Jobs", component: MarketplaceJobs },
+        { id: "marketplace", label: "🏪 All Jobs (Disputes)", component: MarketplaceJobs },
         { id: "dashboard", label: "📊 Dashboard", component: JobDashboard },
       ];
     default:
@@ -55,8 +50,8 @@ const getRoleLabel = (role: UserRole) => {
 const getDefaultTab = (role: UserRole): TabType => {
   switch (role) {
     case 'client': return 'create';
-    case 'freelancer': return 'open_jobs';
-    case 'arbiter': return 'arbiter';
+    case 'freelancer': return 'explorer';
+    case 'arbiter': return 'marketplace';
     default: return 'marketplace';
   }
 };
@@ -73,7 +68,6 @@ export default function Home() {
   const tabs = getRoleTabs(role);
   const roleInfo = getRoleLabel(role);
   
-  // Get the first tab as default if current tab not available for this role
   const defaultTab = getDefaultTab(role);
   const availableTabs = tabs.map(t => t.id);
   const currentTab = activeTab && availableTabs.includes(activeTab) ? activeTab : defaultTab;
@@ -90,10 +84,10 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  SUI Escrow v2
+                  SUI Escrow
                 </h1>
                 <p className="text-sm text-gray-600 mt-1">
-                  Decentralized freelance marketplace with open jobs
+                  Milestone-based freelance escrow
                 </p>
               </div>
               {/* Role Badge */}
@@ -103,7 +97,6 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* Switch Role Button */}
               <button
                 onClick={clearRole}
                 className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -115,6 +108,18 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* V1 Info Banner */}
+      <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+        <div className="max-w-6xl mx-auto flex items-center justify-between text-sm">
+          <span className="text-blue-700">
+            <strong>V1 Module:</strong> {CONTRACT_CONFIG.MODULE_NAME} • Arbiter: {CONTRACT_CONFIG.ARBITER_ADDRESS?.slice(0, 10)}...
+          </span>
+          <span className="text-blue-600">
+            Status: ASSIGNED(0) → WORKING(1) → IN_REVIEW(2) → APPROVED/REJECTED
+          </span>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-8">
@@ -145,18 +150,8 @@ export default function Home() {
       <footer className="bg-white border-t border-gray-200 mt-12">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between text-sm text-gray-500">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-700">SUI Escrow v2</span>
-              <span>•</span>
-              <span>Powered by SUI Blockchain</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span>Multi-Arbiter System</span>
-              <span>•</span>
-              <span>Deadline Protection</span>
-              <span>•</span>
-              <span>Open Jobs Marketplace</span>
-            </div>
+            <span className="font-semibold text-gray-700">SUI Escrow V1</span>
+            <span>Milestone-based payments • Arbiter dispute resolution</span>
           </div>
         </div>
       </footer>

@@ -9,61 +9,57 @@ export const CONTRACT_CONFIG = {
   PACKAGE_ID:
     "0x54eb8e00613bb1c63f9581df45f9a9d8d9cf0bbf9089058ca378c5fffe62d742",
 
-  MODULE_NAME: "progressive_escrow_v2",
+  // Using V1 module (progressive_escrow) - simpler, proven working
+  MODULE_NAME: "progressive_escrow",
 
   // Shared object IDs (created at deployment)
   ARBITER_REGISTRY_ID:
     "0xc8743783d6e8082765f9876e608470749d4c2d30e7622787c8e71eb3c4f900e4",
+  
+  // Hardcoded arbiter from v1 contract
+  ARBITER_ADDRESS: "0x90cb8d57bd13f74ea9337dca1e270e51c6ce64f7fb78d571b73f2386ac91e534",
 
   FUNCTIONS: {
-    // Job Functions
+    // Job Functions (V1)
     POST_JOB: "post_job",
     CANCEL_JOB: "cancel_job",
     
-    // Application Functions
-    APPLY_FOR_JOB: "apply_for_job",
-    ACCEPT_APPLICATION: "accept_application",
-    REJECT_APPLICATION: "reject_application",
-    
-    // Work Functions
+    // Work Functions (V1)
     START_WORK: "start_work",
     SUBMIT_WORK: "submit_work",
     
-    // Review Functions
+    // Review Functions (V1)
     APPROVE_MILESTONE: "approve_milestone",
     REJECT_MILESTONE: "reject_milestone",
-    AUTO_APPROVE_IF_DEADLINE_PASSED: "auto_approve_if_deadline_passed",
     
-    // Dispute Functions
+    // Dispute Functions (V1)
     RAISE_DISPUTE: "raise_dispute",
     ARBITER_DECIDE: "arbiter_decide",
-    
-    // Arbiter Functions
-    REGISTER_ARBITER: "register_arbiter",
   },
 } as const;
 
-// New Job Status for v2 (includes OPEN status)
+// V1 Job Status Constants (different from V2!)
+// V1: ASSIGNED=0, WORKING=1, IN_REVIEW=2, REJECTED=3, APPROVED=4, DISPUTED=5, CANCELLED=6, COMPLETED=7
 export const JOB_STATUS = {
-  OPEN: 0,       // Job is open for applications
-  ASSIGNED: 1,   // Freelancer assigned, waiting to start
-  WORKING: 2,    // Freelancer is working
-  IN_REVIEW: 3,  // Milestone submitted for review
-  REJECTED: 4,   // Client rejected work
+  ASSIGNED: 0,   // Freelancer assigned, waiting to start
+  WORKING: 1,    // Freelancer is working
+  IN_REVIEW: 2,  // Milestone submitted for review
+  REJECTED: 3,   // Client rejected work
+  APPROVED: 4,   // Milestone approved (temp status before WORKING/COMPLETED)
   DISPUTED: 5,   // Waiting for arbiter decision
-  COMPLETED: 6,  // All milestones done
-  CANCELLED: 7,  // Job cancelled
+  CANCELLED: 6,  // Job cancelled
+  COMPLETED: 7,  // All milestones done
 } as const;
 
 export const JOB_STATUS_LABELS = {
-  [JOB_STATUS.OPEN]: "Open - Accepting Applications",
-  [JOB_STATUS.ASSIGNED]: "Assigned - Waiting to Start",
+  [JOB_STATUS.ASSIGNED]: "Assigned - Click Start Work",
   [JOB_STATUS.WORKING]: "In Progress",
   [JOB_STATUS.IN_REVIEW]: "Milestone Submitted",
   [JOB_STATUS.REJECTED]: "Revision Needed",
+  [JOB_STATUS.APPROVED]: "Approved",
   [JOB_STATUS.DISPUTED]: "Dispute - Awaiting Arbiter",
-  [JOB_STATUS.COMPLETED]: "Completed",
   [JOB_STATUS.CANCELLED]: "Cancelled",
+  [JOB_STATUS.COMPLETED]: "Completed",
 } as const;
 
 // Application Status

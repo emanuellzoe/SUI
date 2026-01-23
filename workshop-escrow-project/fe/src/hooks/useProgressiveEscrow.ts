@@ -151,10 +151,10 @@ export const useProgressiveEscrow = () => {
   // ============= JOB FUNCTIONS =============
 
   /**
-   * Post an open job that freelancers can apply to
-   * V2: No freelancer address needed - job is open for applications
+   * Post a job with assigned freelancer (V1 format)
+   * V1: Requires freelancer address - job is immediately assigned
    */
-  const postJob = async (jobData: JobDataV2) => {
+  const postJob = async (jobData: JobDataV2 & { freelancerAddress?: string }) => {
     try {
       setIsLoading(true);
 
@@ -170,15 +170,16 @@ export const useProgressiveEscrow = () => {
         throw new Error("Milestones must be greater than 0");
       }
 
+      // V1 requires freelancer address
+      if (!jobData.freelancerAddress) {
+        throw new Error("Freelancer address is required for V1 contract");
+      }
+
       const paymentInMist = Math.floor(jobData.payment * 1_000_000_000);
 
       if (paymentInMist <= 0) {
         throw new Error("Payment amount is too small");
       }
-
-      // Convert days to milliseconds for deadlines
-      const deadlineMs = (jobData.deadlinePerMilestoneDays || 7) * 24 * 60 * 60 * 1000;
-      const reviewPeriodMs = (jobData.reviewPeriodDays || 3) * 24 * 60 * 60 * 1000;
 
       const tx = new Transaction();
       const [paymentCoin] = tx.splitCoins(tx.gas, [paymentInMist]);
@@ -186,18 +187,17 @@ export const useProgressiveEscrow = () => {
       const jobMetadata = {
         title: jobData.title,
         description: jobData.description,
-        requirements: jobData.requirements,
+        requirements: jobData.requirements || "",
       };
 
+      // V1 post_job signature: (freelancer, total_milestones, description, payment)
       tx.moveCall({
         target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::${CONTRACT_CONFIG.FUNCTIONS.POST_JOB}`,
         arguments: [
+          tx.pure.address(jobData.freelancerAddress),
           tx.pure.u64(jobData.milestones),
           tx.pure.string(JSON.stringify(jobMetadata)),
-          tx.pure.u64(deadlineMs),
-          tx.pure.u64(reviewPeriodMs),
           paymentCoin,
-          tx.object("0x6"), // Clock object
         ],
       });
 
@@ -320,7 +320,7 @@ export const useProgressiveEscrow = () => {
   // ============= WORK FUNCTIONS =============
 
   /**
-   * Start work on an assigned job (with deadline tracking)
+   * Start work on an assigned job (V1 - no Clock needed)
    */
   const startWork = async (jobId: string) => {
     try {
@@ -332,7 +332,7 @@ export const useProgressiveEscrow = () => {
         target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::${CONTRACT_CONFIG.FUNCTIONS.START_WORK}`,
         arguments: [
           tx.object(jobId),
-          tx.object("0x6"), // Clock object for deadline tracking
+          // V1: No Clock needed
         ],
       });
 
@@ -347,7 +347,7 @@ export const useProgressiveEscrow = () => {
   };
 
   /**
-   * Submit milestone work (with review deadline tracking)
+   * Submit milestone work (V1 - no Clock needed)
    */
   const submitWork = async (jobId: string, milestoneDescription: string) => {
     try {
@@ -364,7 +364,7 @@ export const useProgressiveEscrow = () => {
         arguments: [
           tx.object(jobId),
           tx.pure.string(milestoneDescription),
-          tx.object("0x6"), // Clock object for review deadline
+          // V1: No Clock needed
         ],
       });
 
